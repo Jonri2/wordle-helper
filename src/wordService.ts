@@ -13,17 +13,18 @@ import {
   range,
   min,
   values,
-  uniq,
   zip,
   compact,
   every,
   first,
 } from "lodash";
+import * as download from "downloadjs";
 import { allWords, solutionWords } from "./words";
 
 export const green = "#6aaa64";
 export const yellow = "#d1b036";
 export const gray = "#cccccc";
+const hardMode = false;
 
 export const filterWords = (possibleWords: string[], letters: string[], colors: string[]) => {
   if (letters.length < 5) return possibleWords;
@@ -31,27 +32,34 @@ export const filterWords = (possibleWords: string[], letters: string[], colors: 
     let condition = true;
     forEach(letters, (letter, i) => {
       const color = colors[i];
-      const wordWithoutLetter = [...letters];
-      wordWithoutLetter[i] = "_";
-      const duplicateLetterIndex = findIndex(wordWithoutLetter, (l) => {
+      const guessWithoutLetter = [...letters];
+      guessWithoutLetter[i] = "_";
+      const duplicateLetterIndex = findIndex(guessWithoutLetter, (l) => {
         return l === letter;
       });
+      const guessLetterCount = filter(letters, (l) => {
+        return l === letter;
+      }).length;
+      const wordLetterCount = filter([...word], (l) => {
+        return l === letter;
+      }).length;
       switch (color) {
         case green:
           condition = condition && word[i] === letter;
           return;
         case yellow:
-          condition = condition && word[i] !== letter && includes(word, letter);
+          condition =
+            condition &&
+            word[i] !== letter &&
+            includes(word, letter) &&
+            (duplicateLetterIndex === -1 || colors[duplicateLetterIndex] === gray || wordLetterCount > 1);
           return;
         default:
           condition =
             condition &&
             (!includes(word, letter) ||
-              (duplicateLetterIndex !== -1 &&
-                (colors[duplicateLetterIndex] === green || colors[duplicateLetterIndex] === yellow) &&
-                filter([...word], (l) => {
-                  return l === letter;
-                }).length === 1));
+              wordLetterCount < guessLetterCount ||
+              (duplicateLetterIndex !== -1 && colors[duplicateLetterIndex] !== gray && wordLetterCount === 1));
       }
     });
     return condition;
@@ -59,7 +67,7 @@ export const filterWords = (possibleWords: string[], letters: string[], colors: 
   return newPossibileWords;
 };
 
-const getScores = (possibleWords: string[], possibleBurnerWords?: string[], commonLetters?: string[]) => {
+const getScores = (possibleWords: string[], commonLetters: string[], possibleBurnerWords?: string[]) => {
   const letterArrays: string[][] = [];
   forEach(range(5), (_, i) => {
     letterArrays.push(
@@ -76,22 +84,25 @@ const getScores = (possibleWords: string[], possibleBurnerWords?: string[], comm
     let score = 0;
     forEach([...word], (letter, i) => {
       const letterScore = letterCountsByPosition[i][letter] || 0;
-      const notDuplicateLetter =
+      const isDuplicateLetter =
         filter([...word], (l) => {
           return l === letter;
-        }).length === 1;
+        }).length > 1;
       score +=
-        possibleBurnerWords?.length && includes(commonLetters, letter)
+        isDuplicateLetter ||
+        letter === commonLetters[i] ||
+        (possibleBurnerWords?.length && includes(commonLetters, letter))
           ? 0
-          : letterScore + ((notDuplicateLetter && totalLetterCounts[letter] - letterScore) || 0) / 4;
+          : (totalLetterCounts[letter] - letterScore || 0) / 4;
+      if (commonLetters[i] === ".") score += letterScore;
     });
     return score;
   });
   return zipObject(possibleBurnerWords?.length ? possibleBurnerWords : possibleWords, scores);
 };
 
-const getBestWords = (possibleWords: string[], possibleBurnerWords?: string[], commonLetters?: string[]) => {
-  const wordScores = getScores(possibleWords, possibleBurnerWords, commonLetters);
+const getBestWords = (possibleWords: string[], commonLetters: string[], possibleBurnerWords?: string[]) => {
+  const wordScores = getScores(possibleWords, commonLetters, possibleBurnerWords);
   const scores = values(wordScores);
   const maxScore = max(scores) || 0;
   const minScore = min(scores) || 0;
@@ -106,29 +117,34 @@ export const suggestWord = (words: string[], round: number) => {
   const letterArrs = map(words, (pw) => {
     return [...pw];
   });
-  const allLetters = flatten(letterArrs);
   const commonLetters = compact(
-    uniq(
-      flatten(
-        filter(zip(...letterArrs), (letterPositionArr) => {
-          return every(letterPositionArr, (letter) => {
-            return letter === letterPositionArr[0];
-          });
-        }),
-      ),
+    flatten(
+      map(zip(...letterArrs), (letterPositionArr) => {
+        return every(letterPositionArr, (letter) => {
+          return letter === letterPositionArr[0];
+        })
+          ? letterPositionArr[0]
+          : ".";
+      }),
     ),
   );
-  const uniqLetters = filter(uniq(allLetters), (letter) => {
-    return !includes(commonLetters, letter);
-  });
   const shouldUseBurnerWord =
-    commonLetters.length >= 2 &&
-    uniqLetters.length > 2 &&
+    filter(commonLetters, (letter) => {
+      return letter !== ".";
+    }).length >= 2 &&
     numRoundsLeft < words.length &&
     round < 6 &&
     words.length > 2;
-  const { bestWords, maxScore } = getBestWords(words, shouldUseBurnerWord ? allWords : undefined, commonLetters);
-  return maxScore ? keys(bestWords) : shouldUseBurnerWord ? keys(getBestWords(words).bestWords) : [];
+  const { bestWords, maxScore } = getBestWords(
+    words,
+    commonLetters,
+    shouldUseBurnerWord && !hardMode ? allWords : undefined,
+  );
+  return maxScore || keys(bestWords).length === 1
+    ? keys(bestWords)
+    : shouldUseBurnerWord
+    ? keys(getBestWords(words, commonLetters).bestWords)
+    : [];
 };
 
 const getColors = (solution: string, guess: string) => {
@@ -160,27 +176,27 @@ const getColors = (solution: string, guess: string) => {
 export const getAverageScore = () => {
   const localScores: number[] = [];
   let localTotalScore = 0;
+  let output = "";
   forEach(solutionWords, (word) => {
     let numGuesses = 1;
     let sugWord = first(suggestWord(solutionWords, numGuesses)) || "";
+    output += sugWord;
     let posWords = [...solutionWords];
-    let allWordsF = [...allWords];
     while (sugWord !== word) {
       const newColors = getColors(word, sugWord);
       posWords = filterWords(posWords, sugWord.split(""), newColors);
-      allWordsF = filterWords(allWordsF, sugWord.split(""), newColors);
       numGuesses += 1;
       sugWord = first(suggestWord(posWords, numGuesses)) || "";
+      output += `,${sugWord}`;
       if (sugWord === "") {
         console.error(`No solution found for ${word}`);
         break;
       }
     }
-    if (numGuesses >= 6) {
-      console.log(word);
-    }
     localScores.push(numGuesses);
     localTotalScore += numGuesses;
+    output += "\n";
   });
+  download(output, "results.txt");
   return { localScores, localTotalScore };
 };
