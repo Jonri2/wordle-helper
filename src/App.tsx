@@ -7,16 +7,62 @@ import "./App.css";
 interface LetterInputProps {
   colorValue: string;
   innerRef: React.RefObject<HTMLInputElement>;
+  letterPosition: number;
   onColorChange?: React.ChangeEventHandler<HTMLInputElement>;
   onFocus?: React.FocusEventHandler<HTMLInputElement>;
   onKeyUp?: React.KeyboardEventHandler<HTMLInputElement>;
 }
 
-const LetterInput: React.FC<LetterInputProps> = ({ colorValue, onColorChange, onFocus, onKeyUp, innerRef }) => {
+const LetterInput: React.FC<LetterInputProps> = ({
+  colorValue,
+  onColorChange,
+  onFocus,
+  onKeyUp,
+  innerRef,
+  letterPosition,
+}) => {
   return (
     <div className="letter-input-container">
-      <input ref={innerRef} className="letter-input" maxLength={1} onFocus={onFocus} onKeyUp={onKeyUp} />
-      <input className="color-input" list="presets" onChange={onColorChange} type="color" value={colorValue} />
+      <input
+        ref={innerRef}
+        className="letter-input"
+        maxLength={1}
+        onFocus={onFocus}
+        onKeyUp={onKeyUp}
+        style={{ backgroundColor: colorValue === gray ? undefined : colorValue }}
+      />
+      <div className="color-container">
+        <div className="color-input">
+          <input
+            checked={colorValue === gray}
+            name={`color-${letterPosition}`}
+            onChange={onColorChange}
+            type="radio"
+            value={gray}
+          />
+          <div className="color-label" style={{ backgroundColor: gray }} />
+        </div>
+        <div className="color-input">
+          <input
+            checked={colorValue === yellow}
+            name={`color-${letterPosition}`}
+            onChange={onColorChange}
+            type="radio"
+            value={yellow}
+          />
+          <div className="color-label" style={{ backgroundColor: yellow }} />
+        </div>
+        <div className="color-input">
+          <input
+            checked={colorValue === green}
+            name={`color-${letterPosition}`}
+            onChange={onColorChange}
+            type="radio"
+            value={green}
+          />
+          <div className="color-label" style={{ backgroundColor: green }} />
+        </div>
+      </div>
     </div>
   );
 };
@@ -146,11 +192,6 @@ export const App = () => {
             : "None"}
         </p>
         <p>Round: {round}</p>
-        <datalist id="presets">
-          <option value={gray}>None</option>
-          <option value={yellow}>Yellow</option>
-          <option value={green}>Green</option>
-        </datalist>
         <div className="all-letters-container">
           {map(range(5), (val) => {
             return (
@@ -158,6 +199,7 @@ export const App = () => {
                 key={`letter-${val}`}
                 colorValue={colors[val]}
                 innerRef={letterRefs[val]}
+                letterPosition={val}
                 onColorChange={setColor(val)}
                 onFocus={setFocus(val)}
                 onKeyUp={onKeyUp}
