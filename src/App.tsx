@@ -100,7 +100,7 @@ export const App = () => {
   const onSubmit = useCallback(() => {
     const letters: string[] = [];
     forEach(letterRefs, (ref) => {
-      ref.current && letters.push(ref.current.value);
+      ref.current && letters.push(ref.current.value.toLowerCase());
     });
     if (!includes(allWords, letters.join(""))) {
       setNotInWordList(true);

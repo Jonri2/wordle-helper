@@ -8,7 +8,7 @@
 }
 
 .possible-words-list {
-  columns: 10;
+  columns: 8;
   list-style: none;
   margin-left: -40px;
 }
