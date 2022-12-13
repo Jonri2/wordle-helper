@@ -1,1 +1,1 @@
-# [wordle-helper](www.wordleassist.web.app)
+# [wordle-helper](http://wordleassist.web.app)
